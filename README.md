@@ -4,6 +4,53 @@ PointMate is a comprehensive platform designed to help Vishweswaraya Technologic
 
 ---
 
+## 📸 App Preview
+
+### 🏠 Homepage
+![Homepage](screenshots/homepage.png)
+
+---
+
+### 📅 Events Page
+![Events Page](screenshots/events_page.png)
+
+---
+
+### 🎓 Student Dashboard
+![Student Dashboard](screenshots/student_dashboard.png)
+
+---
+
+### 📋 Activity Log
+![Activity Log](screenshots/activity_log.png)
+
+---
+
+### 🏅 Certificates Page
+![Certificates Page](screenshots/certificates_page.png)
+
+---
+
+### 📝 Self Report Page
+![Self Report Page](screenshots/self_report.png)
+
+---
+
+### 🏢 Organization Dashboard
+![Organization Dashboard](screenshots/org_dashboard.png)
+
+---
+
+### ➕ Organization – Event Creation
+![Event Creation Page](screenshots/org_event_creation.png)
+
+---
+
+### ⚙️ Organization – Event Management
+![Event Management Page](screenshots/org_event_management.png)
+
+---
+
 ## 🚀 Features
 
 ### For Students
