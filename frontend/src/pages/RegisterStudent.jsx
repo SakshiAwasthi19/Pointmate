@@ -11,7 +11,9 @@ const RegisterStudent = ({ embedded = false }) => {
 
     const onSubmit = async (data) => {
         try {
-            const payload = { ...data, userType: 'student', school_id: data.collegeName || data.institutionName };
+            console.log("FORM DATA:", data); 
+            
+            const payload = { ...data, userType: 'student', school_id: data.collegeName?.trim() || "DEFAULT_SCHOOL" };
             const response = await authAPI.register(payload);
             if (response.success) {
                 toast.success('Registration Successful! Please Login.');
