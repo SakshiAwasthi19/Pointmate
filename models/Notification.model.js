@@ -28,11 +28,14 @@ const NotificationSchema = new mongoose.Schema({
         type: String,
         default: null
     },
-    createdAt: {
-        type: Date,
-        default: Date.now
-    }
-}, { timestamps: true });
+    school_id: {
+        type: String,
+        required: [true, 'School ID is required'],
+        index: true,
+    },
+}, { 
+    timestamps: true 
+});
 
 // Delete notifications after 30 days automatically
 NotificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 2592000 });

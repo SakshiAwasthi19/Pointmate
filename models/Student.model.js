@@ -47,6 +47,11 @@ const StudentSchema = new mongoose.Schema({
     graduationYear: {
         type: String,
     },
+    school_id: {
+        type: String,
+        required: [true, 'School ID is required'],
+        index: true,
+    },
     phoneNumber: {
         type: String,
         required: [true, 'Phone number is required'],
@@ -69,43 +74,6 @@ const StudentSchema = new mongoose.Schema({
         }],
         default: Array.from({ length: 8 }, (_, i) => ({ semester: i + 1, points: 0 })),
     },
-    activities: [{
-        title: { type: String, required: true },
-        description: String,
-        domain: {
-            type: String,
-            enum: ['Technical', 'Soft Skills', 'Community Service', 'Cultural', 'Sports', 'Environmental'],
-            required: true,
-        },
-        aictePoints: { type: Number, required: true, min: 0 },
-        date: { type: Date, required: true },
-        semester: { type: Number, required: true },
-        certificates: [{
-            url: String,
-            publicId: String,
-            uploadedAt: Date,
-        }],
-        photos: [{
-            url: String,
-            publicId: String,
-            uploadedAt: Date,
-        }],
-        eventId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'Event',
-        },
-        status: {
-            type: String,
-            enum: ['pending', 'approved', 'rejected'],
-            default: 'pending',
-        },
-        remarks: String,
-        createdAt: { type: Date, default: Date.now },
-    }],
-    registeredEvents: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Event',
-    }],
     location: {
         type: {
             type: String,
@@ -121,7 +89,9 @@ const StudentSchema = new mongoose.Schema({
         state: String,
         pincode: String,
     },
-}, { timestamps: true });
+}, { 
+    timestamps: true 
+});
 
 // Index for geospacial queries
 StudentSchema.index({ location: '2dsphere' });
