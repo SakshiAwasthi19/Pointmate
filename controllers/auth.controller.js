@@ -3,18 +3,14 @@ const Student = require('../models/Student.model');
 const Organization = require('../models/Organization.model');
 const { generateToken } = require('../middleware/auth.middleware');
 
-// @desc    Register a new user (Student or Organization)
-// @route   POST /api/auth/register
-// @access  Public
+// @desc Register
 exports.register = async (req, res) => {
     try {
-        // ✅ Extract fields
         const { email, password, userType, school_id, collegeName, ...profileData } = req.body;
 
-        // ✅ Fallback for school_id
         const finalSchoolId = school_id || collegeName || "DEFAULT_SCHOOL";
 
-        // 1. Validation
+        // Validation
         if (!email || !password || !userType) {
             return res.status(400).json({
                 success: false,
@@ -29,7 +25,7 @@ exports.register = async (req, res) => {
             });
         }
 
-        // 2. Check if user exists
+        // Check existing user
         const userExists = await User.findOne({ email });
         if (userExists) {
             return res.status(400).json({
@@ -38,7 +34,7 @@ exports.register = async (req, res) => {
             });
         }
 
-        // 3. Create User (✅ FIXED)
+        // Create user
         const user = await User.create({
             email,
             password,
@@ -46,8 +42,8 @@ exports.register = async (req, res) => {
             school_id: finalSchoolId
         });
 
-        // 4. Create Profile
         let profile;
+
         try {
             if (userType === 'student') {
                 profile = await Student.create({
@@ -55,12 +51,18 @@ exports.register = async (req, res) => {
                     email: user.email,
                     school_id: finalSchoolId,
 
-                    // ✅ CRITICAL FIX (collegeName fallback)
+                    // FIX 1: collegeName
                     collegeName: collegeName?.trim() || finalSchoolId,
+
+                    // FIX 2: GEO LOCATION (CRITICAL)
+                    location: {
+                        type: "Point",
+                        coordinates: [0, 0]
+                    },
 
                     ...profileData
                 });
-            } else if (userType === 'organization') {
+            } else {
                 profile = await Organization.create({
                     userId: user._id,
                     organizationEmail: user.email,
@@ -69,24 +71,21 @@ exports.register = async (req, res) => {
                 });
             }
         } catch (profileError) {
-            // Rollback user if profile fails
             await User.findByIdAndDelete(user._id);
 
             if (profileError.code === 11000) {
                 const field = Object.keys(profileError.keyPattern)[0];
                 return res.status(400).json({
                     success: false,
-                    message: `Duplicate value for ${field}. Please use unique credentials.`
+                    message: `Duplicate value for ${field}`
                 });
             }
 
             throw profileError;
         }
 
-        // 5. Generate Token
         const token = generateToken(user._id, user.userType);
 
-        // 6. Response
         res.status(201).json({
             success: true,
             token,
@@ -108,30 +107,23 @@ exports.register = async (req, res) => {
     }
 };
 
-// LOGIN (unchanged)
+// LOGIN
 exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
 
         if (!email || !password) {
-            return res.status(400).json({
-                success: false,
-                message: 'Please provide email and password'
-            });
+            return res.status(400).json({ success: false, message: 'Provide email & password' });
         }
 
         const user = await User.findOne({ email }).select('+password');
-        if (!user) {
-            return res.status(401).json({ success: false, message: 'Invalid credentials' });
-        }
+        if (!user) return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
         const isMatch = await user.comparePassword(password);
-        if (!isMatch) {
-            return res.status(401).json({ success: false, message: 'Invalid credentials' });
-        }
+        if (!isMatch) return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
         if (!user.isActive) {
-            return res.status(403).json({ success: false, message: 'Account is deactivated' });
+            return res.status(403).json({ success: false, message: 'Account deactivated' });
         }
 
         let profile;
@@ -162,7 +154,7 @@ exports.login = async (req, res) => {
 
     } catch (err) {
         console.error('Login Error:', err.message);
-        res.status(500).json({ success: false, message: 'Server error during login' });
+        res.status(500).json({ success: false, message: 'Server error' });
     }
 };
 
@@ -182,9 +174,10 @@ exports.getCurrentUser = async (req, res) => {
             success: true,
             data: { user, profile }
         });
+
     } catch (err) {
         console.error('Get Me Error:', err.message);
-        res.status(500).json({ success: false, message: 'Server error' });
+        res.status(500).json({ success: false });
     }
 };
 
@@ -194,14 +187,14 @@ exports.changePassword = async (req, res) => {
         const { currentPassword, newPassword } = req.body;
 
         if (!currentPassword || !newPassword) {
-            return res.status(400).json({ success: false, message: 'Provide both passwords' });
+            return res.status(400).json({ success: false });
         }
 
         const user = await User.findById(req.user.userId).select('+password');
 
         const isMatch = await user.comparePassword(currentPassword);
         if (!isMatch) {
-            return res.status(401).json({ success: false, message: 'Incorrect current password' });
+            return res.status(401).json({ success: false });
         }
 
         user.password = newPassword;
@@ -209,11 +202,11 @@ exports.changePassword = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: 'Password updated successfully'
+            message: 'Password updated'
         });
 
     } catch (err) {
-        console.error('Change pwd Error:', err.message);
-        res.status(500).json({ success: false, message: 'Server error' });
+        console.error(err);
+        res.status(500).json({ success: false });
     }
 };
