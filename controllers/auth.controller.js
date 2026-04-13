@@ -8,7 +8,11 @@ const { generateToken } = require('../middleware/auth.middleware');
 // @access  Public
 exports.register = async (req, res) => {
     try {
-        const { email, password, userType, ...profileData } = req.body;
+        // ✅ FIX: extract school_id + collegeName
+        const { email, password, userType, school_id, collegeName, ...profileData } = req.body;
+
+        // ✅ FIX: fallback logic
+        const finalSchoolId = school_id || collegeName || "DEFAULT_SCHOOL";
 
         // 1. Validation
         if (!email || !password || !userType) {
@@ -25,42 +29,45 @@ exports.register = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Email already registered' });
         }
 
-        // 3. Create User
+        // 3. ✅ FIX: include school_id
         const user = await User.create({
             email,
             password,
-            userType
+            userType,
+            school_id: finalSchoolId
         });
 
         // 4. Create Profile based on userType
         let profile;
         try {
             if (userType === 'student') {
-                // Check for unique studentId (USN) if provided, though model handles unique constraint
-                // If USN conflict happens, database will throw error caught below.
                 profile = await Student.create({
                     userId: user._id,
-                    email: user.email, // Store email in profile as well per schema
+                    email: user.email,
+                    school_id: finalSchoolId, // ✅ FIX
                     ...profileData
                 });
             } else if (userType === 'organization') {
                 profile = await Organization.create({
                     userId: user._id,
                     organizationEmail: user.email,
+                    school_id: finalSchoolId, // ✅ FIX
                     ...profileData
                 });
             }
         } catch (profileError) {
-            // Rollback user creation if profile creation fails
+            // Rollback user if profile fails
             await User.findByIdAndDelete(user._id);
 
-            // Handle unique constraint violations specifically for better messages
             if (profileError.code === 11000) {
                 const field = Object.keys(profileError.keyPattern)[0];
-                return res.status(400).json({ success: false, message: `Duplicate value for ${field}. Please use unique credentials.` });
+                return res.status(400).json({
+                    success: false,
+                    message: `Duplicate value for ${field}. Please use unique credentials.`
+                });
             }
 
-            throw profileError; // Re-throw to be caught by main catch block
+            throw profileError;
         }
 
         // 5. Generate Token
@@ -80,7 +87,11 @@ exports.register = async (req, res) => {
 
     } catch (err) {
         console.error('Register Error:', err.message);
-        res.status(500).json({ success: false, message: 'Server error during registration', error: err.message });
+        res.status(500).json({
+            success: false,
+            message: 'Server error during registration',
+            error: err.message
+        });
     }
 };
 
@@ -91,33 +102,28 @@ exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        // 1. Validate
         if (!email || !password) {
             return res.status(400).json({ success: false, message: 'Please provide email and password' });
         }
 
-        // 2. Find User (explicitly select password)
         const user = await User.findOne({ email }).select('+password');
         if (!user) {
             return res.status(401).json({ success: false, message: 'Invalid credentials' });
         }
 
-        // 3. Check password
         const isMatch = await user.comparePassword(password);
         if (!isMatch) {
             return res.status(401).json({ success: false, message: 'Invalid credentials' });
         }
 
-        // 4. Check if active
         if (!user.isActive) {
-            return res.status(403).json({ success: false, message: 'Account is deactivated. Please contact support.' });
+            return res.status(403).json({ success: false, message: 'Account is deactivated' });
         }
 
-        // 5. Get Profile
         let profile;
         if (user.userType === 'student') {
             profile = await Student.findOne({ userId: user._id });
-        } else if (user.userType === 'organization') {
+        } else {
             profile = await Organization.findOne({ userId: user._id });
         }
 
@@ -125,13 +131,10 @@ exports.login = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Profile not found' });
         }
 
-        // 6. Update Last Login
         await user.updateLastLogin();
 
-        // 7. Generate Token
         const token = generateToken(user._id, user.userType);
 
-        // 8. Response
         res.status(200).json({
             success: true,
             token,
@@ -150,8 +153,6 @@ exports.login = async (req, res) => {
 };
 
 // @desc    Get current user info
-// @route   GET /api/auth/me
-// @access  Private
 exports.getCurrentUser = async (req, res) => {
     try {
         const user = await User.findById(req.user.userId);
@@ -159,16 +160,13 @@ exports.getCurrentUser = async (req, res) => {
         let profile;
         if (user.userType === 'student') {
             profile = await Student.findOne({ userId: user._id });
-        } else if (user.userType === 'organization') {
+        } else {
             profile = await Organization.findOne({ userId: user._id });
         }
 
         res.status(200).json({
             success: true,
-            data: {
-                user,
-                profile
-            }
+            data: { user, profile }
         });
     } catch (err) {
         console.error('Get Me Error:', err.message);
@@ -177,26 +175,21 @@ exports.getCurrentUser = async (req, res) => {
 };
 
 // @desc    Change Password
-// @route   PUT /api/auth/change-password
-// @access  Private
 exports.changePassword = async (req, res) => {
     try {
         const { currentPassword, newPassword } = req.body;
 
         if (!currentPassword || !newPassword) {
-            return res.status(400).json({ success: false, message: 'Please provide current and new password' });
+            return res.status(400).json({ success: false, message: 'Provide both passwords' });
         }
 
-        // Get user with password
         const user = await User.findById(req.user.userId).select('+password');
 
-        // Verify current password
         const isMatch = await user.comparePassword(currentPassword);
         if (!isMatch) {
             return res.status(401).json({ success: false, message: 'Incorrect current password' });
         }
 
-        // Update password
         user.password = newPassword;
         await user.save();
 
