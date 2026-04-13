@@ -8,28 +8,37 @@ const { generateToken } = require('../middleware/auth.middleware');
 // @access  Public
 exports.register = async (req, res) => {
     try {
-        // ✅ FIX: extract school_id + collegeName
+        // ✅ Extract fields
         const { email, password, userType, school_id, collegeName, ...profileData } = req.body;
 
-        // ✅ FIX: fallback logic
+        // ✅ Fallback for school_id
         const finalSchoolId = school_id || collegeName || "DEFAULT_SCHOOL";
 
         // 1. Validation
         if (!email || !password || !userType) {
-            return res.status(400).json({ success: false, message: 'Please provide email, password and user type' });
+            return res.status(400).json({
+                success: false,
+                message: 'Please provide email, password and user type'
+            });
         }
 
         if (!['student', 'organization'].includes(userType)) {
-            return res.status(400).json({ success: false, message: 'Invalid user type' });
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid user type'
+            });
         }
 
         // 2. Check if user exists
         const userExists = await User.findOne({ email });
         if (userExists) {
-            return res.status(400).json({ success: false, message: 'Email already registered' });
+            return res.status(400).json({
+                success: false,
+                message: 'Email already registered'
+            });
         }
 
-        // 3. ✅ FIX: include school_id
+        // 3. Create User (✅ FIXED)
         const user = await User.create({
             email,
             password,
@@ -37,21 +46,25 @@ exports.register = async (req, res) => {
             school_id: finalSchoolId
         });
 
-        // 4. Create Profile based on userType
+        // 4. Create Profile
         let profile;
         try {
             if (userType === 'student') {
                 profile = await Student.create({
                     userId: user._id,
                     email: user.email,
-                    school_id: finalSchoolId, // ✅ FIX
+                    school_id: finalSchoolId,
+
+                    // ✅ CRITICAL FIX (collegeName fallback)
+                    collegeName: collegeName?.trim() || finalSchoolId,
+
                     ...profileData
                 });
             } else if (userType === 'organization') {
                 profile = await Organization.create({
                     userId: user._id,
                     organizationEmail: user.email,
-                    school_id: finalSchoolId, // ✅ FIX
+                    school_id: finalSchoolId,
                     ...profileData
                 });
             }
@@ -95,15 +108,16 @@ exports.register = async (req, res) => {
     }
 };
 
-// @desc    Login user
-// @route   POST /api/auth/login
-// @access  Public
+// LOGIN (unchanged)
 exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
 
         if (!email || !password) {
-            return res.status(400).json({ success: false, message: 'Please provide email and password' });
+            return res.status(400).json({
+                success: false,
+                message: 'Please provide email and password'
+            });
         }
 
         const user = await User.findOne({ email }).select('+password');
@@ -152,7 +166,7 @@ exports.login = async (req, res) => {
     }
 };
 
-// @desc    Get current user info
+// GET CURRENT USER
 exports.getCurrentUser = async (req, res) => {
     try {
         const user = await User.findById(req.user.userId);
@@ -174,7 +188,7 @@ exports.getCurrentUser = async (req, res) => {
     }
 };
 
-// @desc    Change Password
+// CHANGE PASSWORD
 exports.changePassword = async (req, res) => {
     try {
         const { currentPassword, newPassword } = req.body;
@@ -193,7 +207,10 @@ exports.changePassword = async (req, res) => {
         user.password = newPassword;
         await user.save();
 
-        res.status(200).json({ success: true, message: 'Password updated successfully' });
+        res.status(200).json({
+            success: true,
+            message: 'Password updated successfully'
+        });
 
     } catch (err) {
         console.error('Change pwd Error:', err.message);
