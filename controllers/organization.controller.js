@@ -167,6 +167,17 @@ exports.createEvent = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Organization profile not found' });
         }
 
+        const schoolId = typeof organization.school_id === 'string'
+            ? organization.school_id.trim()
+            : organization.school_id;
+        if (!schoolId) {
+            if (req.file) await deleteFromCloudinary(req.file.filename);
+            return res.status(400).json({
+                success: false,
+                message: 'Organization has no school_id. Update the organization profile before creating events.',
+            });
+        }
+
         // DEV MODE: Verification check disabled for testing
         // if (organization.verificationStatus !== 'verified') {
         //     if (req.file) await deleteFromCloudinary(req.file.filename);
@@ -219,6 +230,7 @@ exports.createEvent = async (req, res) => {
 
         const event = new Event({
             organizationId: organization._id,
+            school_id: schoolId,
             title,
             description,
             domain,
