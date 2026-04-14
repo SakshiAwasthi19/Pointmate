@@ -96,10 +96,9 @@ const CreateEvent = () => {
                 data.append('posterUrl', formData.posterUrl)
             }
 
-            // Set registration deadline (default: 1 day before event) if not set? 
-            // User didn't ask for explicit deadline field in UI, so auto-set logic is good.
-            const deadline = new Date(formData.startDateTime)
-            deadline.setDate(deadline.getDate() - 1)
+            // Registration closes when the event ends (no separate deadline field in UI).
+            // Using endDateTime avoids closing signup a day before the event starts.
+            const deadline = new Date(formData.endDateTime || formData.startDateTime)
             data.append('registrationDeadline', deadline.toISOString())
 
             const response = await organizationAPI.createEvent(data)

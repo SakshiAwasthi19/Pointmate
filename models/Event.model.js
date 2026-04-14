@@ -180,13 +180,40 @@ EventSchema.methods.isRegistrationOpen = function () {
     }
 
     const now = Date.now();
+    const startMs = this.startDateTime ? new Date(this.startDateTime).getTime() : NaN;
     const endMs = this.endDateTime ? new Date(this.endDateTime).getTime() : NaN;
     const deadlineMs = this.registrationDeadline ? new Date(this.registrationDeadline).getTime() : NaN;
 
-    const beforeEnd = !Number.isNaN(endMs) ? now < endMs : true;
-    const beforeDeadline = !Number.isNaN(deadlineMs) ? now < deadlineMs : true;
+    if (!Number.isNaN(endMs) && now >= endMs) {
+        return false;
+    }
 
-    return beforeEnd && beforeDeadline && !this.isFull();
+    // Effective "registration closes at" instant (never after event end).
+    // If deadline is shortly before start (e.g. old UI defaulted to "yesterday same time"),
+    // students could not register on the event day — treat close as event end instead.
+    const MS_30H = 30 * 60 * 60 * 1000;
+    const shortEarlyDeadline =
+        !Number.isNaN(deadlineMs) &&
+        !Number.isNaN(startMs) &&
+        deadlineMs < startMs &&
+        startMs - deadlineMs <= MS_30H;
+
+    let closeMs;
+    if (Number.isNaN(deadlineMs)) {
+        closeMs = endMs;
+    } else if (shortEarlyDeadline && !Number.isNaN(endMs)) {
+        closeMs = endMs;
+    } else if (!Number.isNaN(endMs)) {
+        closeMs = Math.min(deadlineMs, endMs);
+    } else {
+        closeMs = deadlineMs;
+    }
+
+    if (Number.isNaN(closeMs)) {
+        return !this.isFull();
+    }
+
+    return now < closeMs && !this.isFull();
 };
 
 // Method to check if student is registered
