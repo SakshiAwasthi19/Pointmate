@@ -1,5 +1,27 @@
 const mongoose = require('mongoose');
 
+const ActivityItemSchema = new mongoose.Schema({
+    title: { type: String, default: '' },
+    description: { type: String, default: '' },
+    domain: { type: String, default: '' },
+    aictePoints: { type: Number, default: 0 },
+    date: { type: Date },
+    semester: { type: Number, min: 1, max: 8 },
+    eventId: { type: mongoose.Schema.Types.ObjectId, ref: 'Event' },
+    certificates: [{
+        url: String,
+        publicId: String,
+        uploadedAt: Date,
+    }],
+    photos: [{
+        url: String,
+        publicId: String,
+        uploadedAt: Date,
+    }],
+    status: { type: String, default: 'pending' },
+    remarks: { type: String, default: '' },
+}, { timestamps: true });
+
 const StudentSchema = new mongoose.Schema({
     userId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -89,6 +111,17 @@ const StudentSchema = new mongoose.Schema({
         state: String,
         pincode: String,
     },
+    activities: {
+        type: [ActivityItemSchema],
+        default: [],
+    },
+    registeredEvents: {
+        type: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Event',
+        }],
+        default: [],
+    },
 }, { 
     timestamps: true 
 });
@@ -98,39 +131,43 @@ StudentSchema.index({ location: '2dsphere' });
 
 // Method to calculate total points & semester-wise distribution
 StudentSchema.methods.calculateTotalPoints = function () {
-    const approvedActivities = this.activities.filter(a => a.status === 'approved');
+    const activities = Array.isArray(this.activities) ? this.activities : [];
+    const approvedActivities = activities.filter(a => a && a.status === 'approved');
 
     // 1. Total Points
-    this.totalPoints = approvedActivities.reduce((sum, act) => sum + act.aictePoints, 0);
+    this.totalPoints = approvedActivities.reduce(
+        (sum, act) => sum + (Number(act?.aictePoints) || 0),
+        0
+    );
 
-    // 2. Semester Wise Points
-    // Reset to 0 first
+    // 2. Semester Wise Points — reset then aggregate
     this.semesterWisePoints = Array.from({ length: 8 }, (_, i) => ({ semester: i + 1, points: 0 }));
 
-    // Aggregation
-    approvedActivities.forEach(act => {
-        // Ensure semester is valid 1-8
-        if (act.semester >= 1 && act.semester <= 8) {
-            // Find the bucket (array index is semester - 1)
-            const index = act.semester - 1;
+    approvedActivities.forEach((act) => {
+        const sem = Number(act?.semester);
+        if (sem >= 1 && sem <= 8) {
+            const index = sem - 1;
             if (this.semesterWisePoints[index]) {
-                this.semesterWisePoints[index].points += act.aictePoints;
+                this.semesterWisePoints[index].points += Number(act?.aictePoints) || 0;
             }
         }
     });
 
-    return this.totalPoints;
+    return Number(this.totalPoints) || 0;
 };
 
 // Method to get progress
 StudentSchema.methods.getProgress = function () {
     const target = 100;
-    this.calculateTotalPoints();
+    if (typeof this.calculateTotalPoints === 'function') {
+        this.calculateTotalPoints();
+    }
+    const current = Number(this.totalPoints) || 0;
     return {
-        current: this.totalPoints,
+        current,
         target,
-        percentage: Math.min((this.totalPoints / target) * 100, 100),
-        remaining: Math.max(target - this.totalPoints, 0),
+        percentage: Math.min((current / target) * 100, 100),
+        remaining: Math.max(target - current, 0),
     };
 };
 

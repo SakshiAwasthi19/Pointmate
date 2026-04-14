@@ -139,10 +139,23 @@ exports.uploadProfilePicture = async (req, res) => {
 exports.getPointsSummary = async (req, res) => {
     try {
         const student = await Student.findOne({ userId: req.user.userId });
-        if (!student) return res.status(404).json({ success: false, message: 'Student not found' });
+        if (!student) {
+            return res.status(404).json({ success: false, message: 'Student not found' });
+        }
 
-        const totalPoints = student.calculateTotalPoints();
-        const progress = student.getProgress();
+        const totalPoints = typeof student.calculateTotalPoints === 'function'
+            ? student.calculateTotalPoints()
+            : (Number(student.totalPoints) || 0);
+        const progress = typeof student.getProgress === 'function'
+            ? student.getProgress()
+            : {
+                current: Number(student.totalPoints) || 0,
+                target: 100,
+                percentage: 0,
+                remaining: 100
+            };
+
+        const activities = Array.isArray(student.activities) ? student.activities : [];
 
         const pointsByCategory = {
             'Technical': 0,
@@ -153,29 +166,34 @@ exports.getPointsSummary = async (req, res) => {
             'Environmental': 0
         };
 
-        const approvedActivities = student.activities.filter(a => a.status === 'approved');
-        approvedActivities.forEach(act => {
-            if (pointsByCategory[act.domain] !== undefined) {
-                pointsByCategory[act.domain] += act.aictePoints;
-            }
-        });
+        activities
+            .filter((a) => a && a.status === 'approved')
+            .forEach((act) => {
+                const domain = act.domain;
+                if (domain && pointsByCategory[domain] !== undefined) {
+                    pointsByCategory[domain] += Number(act.aictePoints) || 0;
+                }
+            });
 
-        const recentActivities = student.activities
-            .filter(a => a.status === 'approved')
-            .sort((a, b) => new Date(b.date) - new Date(a.date))
+        const recentActivities = activities
+            .filter((a) => a && a.status === 'approved')
+            .sort((a, b) => new Date(b?.date || 0) - new Date(a?.date || 0))
             .slice(0, 5);
+
+        const semesterWisePoints = Array.isArray(student.semesterWisePoints) && student.semesterWisePoints.length
+            ? student.semesterWisePoints
+            : Array.from({ length: 8 }, (_, i) => ({ semester: i + 1, points: 0 }));
 
         res.status(200).json({
             success: true,
             data: {
                 totalPoints,
                 progress,
-                semesterWisePoints: student.semesterWisePoints,
+                semesterWisePoints,
                 pointsByCategory,
                 recentActivities
             }
         });
-
     } catch (error) {
         console.error('Points Summary Error:', error.message);
         res.status(500).json({ success: false, message: 'Server Error' });
@@ -520,40 +538,61 @@ exports.getDashboard = async (req, res) => {
         const student = await Student.findOne({ userId: req.user.userId })
             .populate('registeredEvents', 'title startDateTime endDateTime organizedBy poster');
 
-        if (!student) return res.status(404).json({ success: false, message: 'Student not found' });
+        if (!student) {
+            return res.status(404).json({ success: false, message: 'Student not found' });
+        }
 
-        student.calculateTotalPoints();
-        const progress = student.getProgress();
+        if (typeof student.calculateTotalPoints === 'function') {
+            student.calculateTotalPoints();
+        }
+        const progress = typeof student.getProgress === 'function'
+            ? student.getProgress()
+            : {
+                current: Number(student.totalPoints) || 0,
+                target: 100,
+                percentage: 0,
+                remaining: 100
+            };
+
+        const activities = Array.isArray(student.activities) ? student.activities : [];
+        const registeredEvents = Array.isArray(student.registeredEvents)
+            ? student.registeredEvents.filter((e) => e != null)
+            : [];
 
         const stats = {
-            totalActivities: student.activities.length,
-            pendingActivities: student.activities.filter(a => a.status === 'pending').length,
-            approvedActivities: student.activities.filter(a => a.status === 'approved').length,
-            rejectedActivities: student.activities.filter(a => a.status === 'rejected').length,
-            registeredEvents: student.registeredEvents.length
+            totalActivities: activities.length,
+            pendingActivities: activities.filter((a) => a && a.status === 'pending').length,
+            approvedActivities: activities.filter((a) => a && a.status === 'approved').length,
+            rejectedActivities: activities.filter((a) => a && a.status === 'rejected').length,
+            registeredEvents: registeredEvents.length
         };
 
-        const upcomingEvents = student.registeredEvents
-            .filter(e => new Date(e.endDateTime || e.startDateTime) > new Date())
-            .sort((a, b) => new Date(a.startDateTime) - new Date(b.startDateTime))
+        const upcomingEvents = registeredEvents
+            .filter((e) => e && new Date(e.endDateTime || e.startDateTime || 0) > new Date())
+            .sort((a, b) => new Date(a.startDateTime || 0) - new Date(b.startDateTime || 0))
             .slice(0, 5);
 
-        const recentActivities = student.activities
-            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        const recentActivities = [...activities]
+            .sort((a, b) => new Date(b?.createdAt || b?.date || 0) - new Date(a?.createdAt || a?.date || 0))
             .slice(0, 5);
 
         const pointsByCategory = {
             'Technical': 0, 'Soft Skills': 0, 'Community Service': 0,
             'Cultural': 0, 'Sports': 0, 'Environmental': 0
         };
-        student.activities.filter(a => a.status === 'approved').forEach(act => {
-            if (pointsByCategory[act.domain] !== undefined) pointsByCategory[act.domain] += act.aictePoints;
-        });
+        activities
+            .filter((a) => a && a.status === 'approved')
+            .forEach((act) => {
+                const domain = act.domain;
+                if (domain && pointsByCategory[domain] !== undefined) {
+                    pointsByCategory[domain] += Number(act.aictePoints) || 0;
+                }
+            });
 
         res.status(200).json({
             success: true,
             data: {
-                totalPoints: student.totalPoints,
+                totalPoints: Number(student.totalPoints) || 0,
                 progress,
                 stats,
                 upcomingEvents,
@@ -561,7 +600,6 @@ exports.getDashboard = async (req, res) => {
                 pointsByCategory
             }
         });
-
     } catch (error) {
         console.error('Dashboard Error:', error.message);
         res.status(500).json({ success: false, message: 'Server Error' });
