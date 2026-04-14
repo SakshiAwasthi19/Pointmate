@@ -158,7 +158,8 @@ exports.registerForEvent = async (req, res) => {
         const generatedPassId = crypto.randomBytes(8).toString('hex');
 
         // Safety check for Pass ID collision (rare but good practice)
-        const isPassIdDuplicate = event.registeredStudents.some(r => r.passId === generatedPassId);
+        const regs = Array.isArray(event.registeredStudents) ? event.registeredStudents : [];
+        const isPassIdDuplicate = regs.some((r) => r.passId === generatedPassId);
         if (isPassIdDuplicate) {
             // Retry once simple trick
             return exports.registerForEvent(req, res);

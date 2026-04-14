@@ -1,5 +1,32 @@
 const mongoose = require('mongoose');
 
+const EventRegistrationSchema = new mongoose.Schema({
+    studentId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Student',
+        required: true,
+    },
+    registeredAt: {
+        type: Date,
+        default: Date.now,
+    },
+    passId: { type: String },
+    attended: {
+        type: Boolean,
+        default: false,
+    },
+    status: {
+        type: String,
+        enum: ['pending', 'approved', 'rejected'],
+        default: 'pending',
+    },
+    feedback: {
+        rating: { type: Number, min: 1, max: 5 },
+        comment: String,
+        submittedAt: Date,
+    },
+}, { _id: true });
+
 const EventSchema = new mongoose.Schema({
     organizationId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -91,6 +118,31 @@ const EventSchema = new mongoose.Schema({
         required: [true, 'School ID is required'],
         index: true,
     },
+    status: {
+        type: String,
+        enum: ['approved', 'pending', 'rejected', 'completed'],
+        default: 'pending',
+        index: true,
+    },
+    registeredStudents: {
+        type: [EventRegistrationSchema],
+        default: [],
+    },
+    views: {
+        type: Number,
+        default: 0,
+    },
+    aiValidation: {
+        passed: Boolean,
+        confidence: Number,
+        matchedCategory: String,
+        validatedAt: Date,
+        remarks: String,
+    },
+    rating: {
+        average: { type: Number, default: 0, min: 0, max: 5 },
+        count: { type: Number, default: 0 },
+    },
     featured: {
         type: Boolean,
         default: false,
@@ -120,23 +172,39 @@ EventSchema.methods.isFull = function () {
 
 // Method to check if registration is open
 EventSchema.methods.isRegistrationOpen = function () {
-    // DEV: Allow 'pending' status and registration until event ends
     const validStatuses = ['approved', 'pending'];
-    return (
-        validStatuses.includes(this.status) &&
-        new Date() < this.endDateTime && // Relaxed from registrationDeadline
-        !this.isFull()
-    );
+    // Legacy docs created before `status` was in schema may have no status in DB
+    const status = this.status != null ? this.status : 'approved';
+    if (!validStatuses.includes(status)) {
+        return false;
+    }
+
+    const now = Date.now();
+    const endMs = this.endDateTime ? new Date(this.endDateTime).getTime() : NaN;
+    const deadlineMs = this.registrationDeadline ? new Date(this.registrationDeadline).getTime() : NaN;
+
+    const beforeEnd = !Number.isNaN(endMs) ? now < endMs : true;
+    const beforeDeadline = !Number.isNaN(deadlineMs) ? now < deadlineMs : true;
+
+    return beforeEnd && beforeDeadline && !this.isFull();
 };
 
 // Method to check if student is registered
 EventSchema.methods.isStudentRegistered = function (studentId) {
-    return this.registeredStudents.some(reg => reg.studentId.toString() === studentId.toString());
+    const list = this.registeredStudents;
+    if (!Array.isArray(list) || list.length === 0) return false;
+    const sid = studentId && studentId.toString();
+    return list.some((reg) => {
+        const regStudent = reg.studentId;
+        const regId = regStudent && (regStudent._id != null ? regStudent._id : regStudent);
+        return regId && regId.toString() === sid;
+    });
 };
 
 // Method to update rating
 EventSchema.methods.updateRating = function () {
-    const feedbacks = this.registeredStudents.filter(r => r.feedback && r.feedback.rating);
+    const list = Array.isArray(this.registeredStudents) ? this.registeredStudents : [];
+    const feedbacks = list.filter(r => r.feedback && r.feedback.rating);
     if (feedbacks.length === 0) {
         this.rating.average = 0;
         this.rating.count = 0;
