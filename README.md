@@ -4,6 +4,12 @@ PointMate is a comprehensive platform designed to help Vishweswaraya Technologic
 
 ---
 
+## 🔗 Live URLs
+
+- Frontend: [https://pointmate.vercel.app/](https://pointmate.vercel.app/)
+- Backend: [https://pointmate-backend.onrender.com](https://pointmate-backend.onrender.com)
+
+
 ## 📸 App Preview
 
 ### 🏠 Homepage
